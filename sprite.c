@@ -1,22 +1,104 @@
 #include "huc.h"
 
-/* #incspr(cigarettes, "graphics/cigarettes.pcx", 0, 0, 2, 1);
-#incpal(cigarettespal, "graphics/cigarettes.pcx"); */
 #asm
+    .zp
+    _data_pointer: .ds 2
+    _bank: .ds 1
+
+    _palette_bank: .ds 1
+    _palette_address: .ds 2
+    _sprite_bank: .ds 1
+    _sprite_address: .ds 2
+    _sprite_size: .ds 1
+    ;// TODO _sprite_x: .ds 2
+    ;// TODO _sprite_y: .ds 2
+
+
     .data
+    .bank 3
+    .org $4000
+
+    ;//items:
+        .dw _item_cigarettes
+
     _spr_cigarettes:
         .incspr "graphics/cigarettes.pcx",0,0,2,1
     _pal_cigarettes:
         .incpal "graphics/cigarettes.pcx"
+
+
+    _item_cigarettes:
+        .dw _pal_cigarettes
+        .dw _spr_cigarettes
+        .db $80 ;// sprite size
+        .dw 188 ;// sprite x
+        .dw 167 ;// sprite y
+        .db $b9 ;// ctrl_mask FLIP_MAS|SIZE_MAS = 0x88|0x31
+        .db $01 ;// ctrl_value NO_FLIP|SZ_32x16;// 0x00|0x01
+
+    .bank 59
+    .org $4000
+
+    ;//items:
+        .dw _item_yellow_bot
+
+    _spr_yellow_bot:
+        .incspr "graphics/yellow-bot.pcx",0,0,1,1
+    _pal_yellow_bot:
+        .incpal "graphics/yellow-bot.pcx"
+
+    _item_yellow_bot:
+        .dw _pal_yellow_bot
+        .dw _spr_yellow_bot
+        .db $40 ;// sprite size
+        .dw 50 ;// sprite x
+        .dw 50 ;// sprite y
+        .db $b9 ;// ctrl_mask FLIP_MAS|SIZE_MAS = 0x88|0x31
+        .db $00 ;// ctrl_value NO_FLIP|SZ_16x16 = 0x00|0x00
+
+
+
     .code
+    .macro __load_and_inc_pointer
+        lda [\1]
+        inc \1
+    .endm
+
+    ;// \1 = bank number
+    .macro __load_item
+        lda \1
+        tam #$2 ;// outputs 53 04 -- why 04 when the value here is 2??
+
+        lda $4000
+        sta <_data_pointer
+        lda $4000+1
+        sta <_data_pointer+1
+
+        __load_and_inc_pointer _data_pointer
+        sta _palette_address
+        __load_and_inc_pointer _data_pointer
+        sta _palette_address+1
+        __load_and_inc_pointer _data_pointer
+        sta _sprite_address
+        __load_and_inc_pointer _data_pointer
+        sta _sprite_address+1
+        __load_and_inc_pointer _data_pointer
+        sta _sprite_size
+        __load_and_inc_pointer _data_pointer
+        sta _sprite_x
+        __load_and_inc_pointer _data_pointer
+        sta _sprite_x+1
+        __load_and_inc_pointer _data_pointer
+        sta _sprite_y
+        __load_and_inc_pointer _data_pointer
+        sta _sprite_y+1
+        __load_and_inc_pointer _data_pointer
+        sta _sprite_ctrl_mask
+        __load_and_inc_pointer _data_pointer
+        sta _sprite_ctrl_value
+    .endm
 #endasm
 
-
-char palette_bank;
-int palette_address;
-char sprite_bank;
-int sprite_address;
-char sprite_size;
 int sprite_x;
 int sprite_y;
 char sprite_ctrl_mask;
@@ -24,7 +106,7 @@ char sprite_ctrl_value;
 
 char dmanager_spr_num;
 int dmanager_spr_vaddr;
-
+char dmanager_pal_num;
 
 spr_make(num, x, y, vaddr, ctrl_mask, ctrl_value, pal, pri)
 char num; int x, y, vaddr; char ctrl_mask, ctrl_value, pal, pri;
@@ -38,62 +120,27 @@ char num; int x, y, vaddr; char ctrl_mask, ctrl_value, pal, pri;
     spr_pri(pri);
 }
 
-clear_display() {
-    disp_off();
-    cls();
-    disp_on();
-}
-
-main() {
-    clear_display();
-
+/* _bank, _dmanager_spr_num, dmanager_spr_vaddr, _dmanager_pal_num */
+load_sprite() {
     #asm
-    lda #bank(_pal_cigarettes)
+    ;// bank to load from
+    lda _bank
+    ;// Assinging _bank value for now but maybe this won't always be the case?
+    ;// Not sure, leaving it for now
     sta _palette_bank
-    lda #low(_pal_cigarettes)
-    sta _palette_address
-    lda #high(_pal_cigarettes)
-    sta _palette_address+1
-
-    lda #bank(_spr_cigarettes)
     sta _sprite_bank
-    lda #low(_spr_cigarettes)
-    sta _sprite_address
-    lda #high(_spr_cigarettes)
-    sta _sprite_address+1
-    lda #$80
-    sta _sprite_size
 
-    lda #low(188)
-    sta _sprite_x
-    lda #high(188)
-    sta _sprite_x+1
-    lda #low(167)
-    sta _sprite_y
-    lda #high(167)
-    sta _sprite_y+1
-
-    lda #$b9 ;// FLIP_MAS|SIZE_MAS = 0x88|0x31
-    sta _sprite_ctrl_mask
-    lda #$01 ;// NO_FLIP|SZ_32x16;// 0x00|0x01
-    sta _sprite_ctrl_value
-
-    lda #0;
-    sta _dmanager_spr_num;
-    lda #low(0x5000)
-    sta _dmanager_spr_vaddr
-    lda #high(0x5000)
-    sta _dmanager_spr_vaddr+1
+    ;// loads the following variables from the given bank
+    ;// _palette_address, _sprite_address, _sprite_size, _sprite_x, _sprite_y, _sprite_ctrl_mask, _sprite_ctrl_value
+    __load_item _bank
     #endasm
 
-    init_satb();
-    spr_make(dmanager_spr_num, sprite_x, sprite_y, dmanager_spr_vaddr, sprite_ctrl_mask, sprite_ctrl_value, 0, 1);
+    spr_make(dmanager_spr_num, sprite_x, sprite_y, dmanager_spr_vaddr, sprite_ctrl_mask, sprite_ctrl_value, dmanager_pal_num, 1);
 
-    /*load_palette(16, cigarettespal, 1);*/
     #asm
-    __ldwi 16
-    stx _al
-    ;//__farptr _pal_cigarettes,_bl,_si
+    ;// load_palette(dmanager_pal_num, palette data, 1);
+    lda _dmanager_pal_num
+    sta _al
     lda _palette_bank
     sta _bl
     lda _palette_address
@@ -103,15 +150,11 @@ main() {
     __ldwi 1
     stx _cl
     call _load_palette.3
-    #endasm
 
-    /*load_vram(0x5000, cigarettes, 0x80);*/
-    #asm
-    ;//__ldwi $5000
+    ;// load_vram(dmanager_spr_vaddr, sprite data, sprite_size);
     ldx _dmanager_spr_vaddr
     lda _dmanager_spr_vaddr+1
     __stw _di
-    ;//__farptr _spr_cigarettes,_bl,_si
     lda _sprite_bank
     sta _bl
     lda _sprite_address
@@ -122,6 +165,46 @@ main() {
     __stw _cx
     call _load_vram.3
     #endasm
+}
+
+main() {
+    init_satb();
+
+    #asm
+    ;// display manager sprite and palette settings
+    ;// this information is owned by the rendering view rather than the items themselves
+    lda #1;
+    sta _dmanager_spr_num;
+    lda #low(0x5000)
+    sta _dmanager_spr_vaddr
+    lda #high(0x5000)
+    sta _dmanager_spr_vaddr+1
+    lda #16
+    sta _dmanager_pal_num
+
+    ;// bank to load from
+    lda #3
+    sta _bank
+    #endasm
+    load_sprite();
+
+    #asm
+    ;// TODO _dmanager_spr_num, _dmanager_spr_vaddr, and _dmanager_pal_num should be auto-incremented
+    ;// based on the last sprite and current state
+    lda #2;
+    sta _dmanager_spr_num;
+    lda #low(0x5100)
+    sta _dmanager_spr_vaddr
+    lda #high(0x5100)
+    sta _dmanager_spr_vaddr+1
+    lda #17
+    sta _dmanager_pal_num
+
+    ;// bank to load from
+    lda #59
+    sta _bank
+    #endasm
+    load_sprite();
 
     satb_update();
     vsync(0);
