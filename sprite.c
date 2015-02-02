@@ -9,7 +9,6 @@
     _palette_address: .ds 2
     _sprite_bank: .ds 1
     _sprite_address: .ds 2
-    _sprite_size: .ds 1
     ;// TODO _sprite_x: .ds 2
     ;// TODO _sprite_y: .ds 2
 
@@ -99,6 +98,7 @@
     .endm
 #endasm
 
+char sprite_size;
 int sprite_x;
 int sprite_y;
 char sprite_ctrl_mask;
@@ -170,36 +170,25 @@ load_sprite() {
 main() {
     init_satb();
 
-    #asm
-    ;// display manager sprite and palette settings
-    ;// this information is owned by the rendering view rather than the items themselves
-    lda #1;
-    sta _dmanager_spr_num;
-    lda #low(0x5000)
-    sta _dmanager_spr_vaddr
-    lda #high(0x5000)
-    sta _dmanager_spr_vaddr+1
-    lda #16
-    sta _dmanager_pal_num
+    /* initialize disply manager settings */
+    dmanager_spr_num = 0;
+    dmanager_spr_vaddr = 0x5000;
+    dmanager_pal_num = 16;
 
+    /* TODO put loading in a loop */
+
+    #asm
     ;// bank to load from
     lda #3
     sta _bank
     #endasm
     load_sprite();
+    /* increment display manager variables */
+    dmanager_spr_num++;
+    dmanager_spr_vaddr += sprite_size;
+    dmanager_pal_num++;
 
     #asm
-    ;// TODO _dmanager_spr_num, _dmanager_spr_vaddr, and _dmanager_pal_num should be auto-incremented
-    ;// based on the last sprite and current state
-    lda #2;
-    sta _dmanager_spr_num;
-    lda #low(0x5100)
-    sta _dmanager_spr_vaddr
-    lda #high(0x5100)
-    sta _dmanager_spr_vaddr+1
-    lda #17
-    sta _dmanager_pal_num
-
     ;// bank to load from
     lda #59
     sta _bank
