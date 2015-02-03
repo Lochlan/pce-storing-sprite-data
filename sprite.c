@@ -3,15 +3,6 @@
 #asm
     .zp
     _data_pointer: .ds 2
-    _bank: .ds 1
-
-    _palette_bank: .ds 1
-    _palette_address: .ds 2
-    _sprite_bank: .ds 1
-    _sprite_address: .ds 2
-    ;// TODO _sprite_x: .ds 2
-    ;// TODO _sprite_y: .ds 2
-
 
     .data
     .bank 3
@@ -56,7 +47,6 @@
         .db $00 ;// ctrl_value NO_FLIP|SZ_16x16 = 0x00|0x00
 
 
-
     .code
     .macro __load_and_inc_pointer
         lda [\1]
@@ -98,6 +88,11 @@
     .endm
 #endasm
 
+char bank;
+int palette_address;
+int sprite_address;
+char sprite_array[8];
+
 char sprite_size;
 int sprite_x;
 int sprite_y;
@@ -120,18 +115,14 @@ char num; int x, y, vaddr; char ctrl_mask, ctrl_value, pal, pri;
     spr_pri(pri);
 }
 
-/* _bank, _dmanager_spr_num, dmanager_spr_vaddr, _dmanager_pal_num */
-load_sprite() {
+/* must set: dmanager_spr_num, dmanager_spr_vaddr, dmanager_pal_num */
+load_sprite(b)
+char b;
+{
+    bank = b;
     #asm
-    ;// bank to load from
-    lda _bank
-    ;// Assinging _bank value for now but maybe this won't always be the case?
-    ;// Not sure, leaving it for now
-    sta _palette_bank
-    sta _sprite_bank
-
     ;// loads the following variables from the given bank
-    ;// _palette_address, _sprite_address, _sprite_size, _sprite_x, _sprite_y, _sprite_ctrl_mask, _sprite_ctrl_value
+    ;// palette_address, sprite_address, sprite_size, sprite_x, sprite_y, sprite_ctrl_mask, sprite_ctrl_value
     __load_item _bank
     #endasm
 
@@ -141,7 +132,7 @@ load_sprite() {
     ;// load_palette(dmanager_pal_num, palette data, 1);
     lda _dmanager_pal_num
     sta _al
-    lda _palette_bank
+    lda _bank
     sta _bl
     lda _palette_address
     sta _si
@@ -155,7 +146,7 @@ load_sprite() {
     ldx _dmanager_spr_vaddr
     lda _dmanager_spr_vaddr+1
     __stw _di
-    lda _sprite_bank
+    lda _bank
     sta _bl
     lda _sprite_address
     sta _si
@@ -165,9 +156,27 @@ load_sprite() {
     __stw _cx
     call _load_vram.3
     #endasm
+
+    return sprite_size;
+}
+
+empty_sprite_array() {
+    char length, i;
+    length = sizeof(sprite_array);
+
+    for (i = 0; i < length; i++) {
+        /* an element equal to 0 is considered empty */
+        sprite_array[i] = 0;
+    }
 }
 
 main() {
+    char last_sprite_size, i;
+
+    empty_sprite_array();
+    sprite_array[0] = 3;
+    sprite_array[1] = 59;
+
     init_satb();
 
     /* initialize disply manager settings */
@@ -175,25 +184,20 @@ main() {
     dmanager_spr_vaddr = 0x5000;
     dmanager_pal_num = 16;
 
-    /* TODO put loading in a loop */
+    /* load sprites in sprite_array */
+    for (i = 0; i < sizeof(sprite_array); i++) {
+        /* skip empty elements */
+        if (sprite_array[i] == 0) {
+            continue;
+        }
 
-    #asm
-    ;// bank to load from
-    lda #3
-    sta _bank
-    #endasm
-    load_sprite();
-    /* increment display manager variables */
-    dmanager_spr_num++;
-    dmanager_spr_vaddr += sprite_size;
-    dmanager_pal_num++;
+        last_sprite_size = load_sprite(sprite_array[i]);
 
-    #asm
-    ;// bank to load from
-    lda #59
-    sta _bank
-    #endasm
-    load_sprite();
+        /* increment display manager variables */
+        dmanager_spr_vaddr += last_sprite_size;
+        dmanager_spr_num++;
+        dmanager_pal_num++;
+    }
 
     satb_update();
     vsync(0);
